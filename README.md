@@ -159,8 +159,94 @@ POST clients/_search
 ```
 
 ## Task 9
-Написать конфигурацию Prometheus для сбора метрик при помощи node exporter и отсылки их в alertmanager (сервера и пути к файлам можете выбирать произвольные)
-9.1	Добавить алерт на загруженность CPU и настроить отправку на почту (почта находится на 25 порту на локальной машине, без пароля и SSL)
+Написать конфигурацию Prometheus для сбора метрик при помощи node exporter и отсылки их в alertmanager (сервера и пути к файлам можете выбирать произвольные)    
 
 Решение:	
-in progress
+`cat /etc/prometheus/prometheus.yml`
+```yaml
+global:
+  scrape_interval: 15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+  - "alert.rules.yml"
+
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: "prometheus"
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+
+    static_configs:
+      - targets: ["localhost:9090"]
+  - job_name: 'node_exporter_clients'
+    scrape_interval: 2s
+    static_configs:
+      - targets: ['192.168.17.146:9100', '10.10.0.2:9100', '172.16.29.200:9100']
+```
+
+9.1	Добавить алерт на загруженность CPU и настроить отправку на почту (почта находится на 25 порту на локальной машине, без пароля и SSL)    
+
+Решение:	
+```cat /etc/prometheus/alert.rules.yml```
+```yaml
+- name: alert.rules
+  rules:
+  - alert: CPU Highload
+    expr: avg(irate(node_cpu_seconds_total{mode="idle"}[1m]) * 100) >= 95
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      description: "{{ $labels.instance }} has a average CPU idle (current value: {{ $value }}s)"
+      summary: "High CPU usage on {{ $labels.instance }}"
+```
+
+```cat /etc/alertmanager/alertmanager.yml```
+```yaml
+global:
+  smtp_from: monitoring@mts.ru
+
+route:
+  group_by: ['alertname', 'instance', 'severity']
+  group_wait: 10s
+  group_interval: 5m
+  repeat_interval: 1h
+  receiver: 'web.hook'
+
+  routes:
+    - receiver: send_email
+      match:
+        alertname: HighCPUload
+
+receivers:
+  - name: 'web.hook'
+    webhook_configs:
+      - url: 'http://127.0.0.1:5001/'
+ - name: send_email
+   email_configs:
+   - to: alert@mts.ru
+     smarthost: localhost:25
+     require_tls: false
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'dev', 'instance']
+```
