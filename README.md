@@ -206,7 +206,7 @@ scrape_configs:
 ```yaml
 - name: alert.rules
   rules:
-  - alert: CPU Highload
+  - alert: CPU_Highload
     expr: avg(irate(node_cpu_seconds_total{mode="idle"}[1m]) * 100) >= 95
     for: 1m
     labels:
@@ -231,7 +231,7 @@ route:
   routes:
     - receiver: send_email
       match:
-        alertname: HighCPUload
+        alertname: CPU_Highload
 
 receivers:
   - name: 'web.hook'
